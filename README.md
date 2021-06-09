@@ -5,30 +5,14 @@ This tutorial will walk you through deploying a three (3) node [Consul](https://
 ## Overview
 
 * Three (3) node Consul cluster using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets)
-* Secure communication between Consul members using [TLS and encryption keys](https://www.consul.io/docs/agent/encryption.html)
 
-## Prerequisites
-
-This tutorial leverages features available in Kubernetes 1.11.0 and later.
-
-* [kubernetes](http://kubernetes.io/docs/getting-started-guides/binary_release) 1.11.x
-
-```
-gcloud container clusters create consul \
-  --cluster-version 1.11.2-gke.9
-```
-
-The following clients must be installed on the machine used to follow this tutorial:
-
-* [consul](https://www.consul.io/downloads.html) 1.4.0-rc
-* [cfssl](https://pkg.cfssl.org) and [cfssljson](https://pkg.cfssl.org) 1.2
 
 ## Usage
 
 Clone this repo:
 
 ```
-git clone https://github.com/kelseyhightower/consul-on-kubernetes.git
+git clone https://github.com/Dukejung/consul-on-kubernetes.git
 ```
 
 Change into the `consul-on-kubernetes` directory:
@@ -37,61 +21,33 @@ Change into the `consul-on-kubernetes` directory:
 cd consul-on-kubernetes
 ```
 
-### Generate TLS Certificates
-
-RPC communication between each Consul member will be encrypted using TLS. Initialize a Certificate Authority (CA):
-
-```
-cfssl gencert -initca ca/ca-csr.json | cfssljson -bare ca
-```
-
-Create the Consul TLS certificate and private key:
+### Create Consul Acl Token
+Create acl token and configuration files using script.
 
 ```
-cfssl gencert \
-  -ca=ca.pem \
-  -ca-key=ca-key.pem \
-  -config=ca/ca-config.json \
-  -profile=default \
-  ca/consul-csr.json | cfssljson -bare consul
+./createAclToken.sh
 ```
+Above script will create bootstrap token using [uuidgen](https://man7.org/linux/man-pages/man1/uuidgen.1.html) and save at aclToken.txt. 
 
-At this point you should have the following files in the current working directory:
+Consul configuration files using bootstrap token will be created as configs/server-acl-config.json and configs/client-acl-config.json.
 
-```
-ca-key.pem
-ca.pem
-consul-key.pem
-consul.pem
-```
-
-### Generate the Consul Gossip Encryption Key
-
-[Gossip communication](https://www.consul.io/docs/internals/gossip.html) between Consul members will be encrypted using a shared encryption key. Generate and store an encrypt key:
-
-```
-GOSSIP_ENCRYPTION_KEY=$(consul keygen)
-```
 
 ### Create the Consul Secret and Configmap
 
-The Consul cluster will be configured using a combination of CLI flags, TLS certificates, and a configuration file, which reference Kubernetes configmaps and secrets.
+The Consul cluster will be configured using a combination of CLI flags and configuration files, which reference Kubernetes configmaps and secrets.
 
-Store the gossip encryption key and TLS certificates in a Secret:
-
-```
-kubectl create secret generic consul \
-  --from-literal="gossip-encryption-key=${GOSSIP_ENCRYPTION_KEY}" \
-  --from-file=ca.pem \
-  --from-file=consul.pem \
-  --from-file=consul-key.pem
-```
-
-Store the Consul server configuration file in a ConfigMap:
+Create a Secret that stores the gossip encryption key and part of server configuration files with acl token using script:
 
 ```
-kubectl create configmap consul --from-file=configs/server.json
+./createSecret.sh
 ```
+
+Create a ConfigMap that stores the Consul server configuration using script:
+
+```
+./createConfigMap.sh
+```
+
 
 ### Create the Consul Service
 
@@ -101,6 +57,12 @@ Create a headless service to expose each Consul member internally to the cluster
 kubectl create -f services/consul.yaml
 ```
 
+Create a load balance service that exposes 8500 port:
+
+```
+kubectl create -f services/consul-ui.yaml
+```
+
 ### Create the Consul Service Account
 
 ```
@@ -108,7 +70,7 @@ kubectl apply -f serviceaccounts/consul.yaml
 ```
 
 ```
-kubectl apply -f clusterroles/consul.yaml
+kubectl apply -f roles/consul.yaml
 ```
 
 ### Create the Consul StatefulSet
@@ -163,13 +125,24 @@ consul-2  10.32.0.13:8301  alive   server  1.4.0rc1  2         dc1  <all>
 
 ### Accessing the Web UI
 
-The Consul UI does not support any form of authentication out of the box so it should not be exposed. To access the web UI, start a port-forward session to the `consul-0` Pod in a new terminal.
+There are two ways to access the web UI.
+
+a. Using kubectl port-forward
+Start a port-forward session to the `consul-0` Pod in a new terminal.
 
 ```
 kubectl port-forward consul-0 8500:8500
 ```
 
 Visit http://127.0.0.1:8500 in your web browser.
+
+b. Using exposed ip.
+
+Get EXTERNAL-IP assigned to the load balancer service named _consul-ui_.
+```
+kubectl get svc
+```
+Visit http://[EXTERNAL-IP]:8500 in your web browser.
 
 ![Image of Consul UI](images/consul-ui.png)
 
