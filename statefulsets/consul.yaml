@@ -34,7 +34,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: consul
-          image: "consul:1.4.0-rc1"
+          image: "consul:1.9.3"
           env:
             - name: POD_IP
               valueFrom:
@@ -45,11 +45,18 @@ spec:
                 secretKeyRef:
                   name: consul
                   key: gossip-encryption-key
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: "1"
+              memory: 1Gi
           args:
             - "agent"
             - "-advertise=$(POD_IP)"
             - "-bootstrap-expect=3"
-            - "-config-file=/etc/consul/config/server.json"
+            - "-config-dir=/etc/consul/config"
             - "-encrypt=$(GOSSIP_ENCRYPTION_KEY)"
           volumeMounts:
             - name: data
@@ -86,8 +93,15 @@ spec:
               name: server
       volumes:
         - name: config
-          configMap:
-            name: consul
+          projected:
+            sources:
+            - configMap:
+                name: consul
+            - secret:
+                name: consul
+                items:
+                  - key: server-acl-config.json
+                    path: server-acl-config.json
         - name: tls
           secret:
             secretName: consul  
