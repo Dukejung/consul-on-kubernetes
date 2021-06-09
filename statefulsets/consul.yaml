@@ -63,8 +63,6 @@ spec:
               mountPath: /consul/data
             - name: config
               mountPath: /etc/consul/config
-            - name: tls
-              mountPath: /etc/tls
           lifecycle:
             preStop:
               exec:
@@ -102,9 +100,6 @@ spec:
                 items:
                   - key: server-acl-config.json
                     path: server-acl-config.json
-        - name: tls
-          secret:
-            secretName: consul  
   volumeClaimTemplates:
     - metadata:
         name: data
